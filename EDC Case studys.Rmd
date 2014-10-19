@@ -1,0 +1,350 @@
+---
+title: "EDA Case Studys"
+author: "D Fresh"
+date: "Sunday, October 19, 2014"
+output: html_document
+---
+
+Clustering Case Study
+```{r}
+setwd("C:/Users/gongshow/Documents/R Projects/EDA case study")
+
+#Note normal data sets will be a pain to construct.  Look into that
+
+load("data/samsungData.rda")
+names(samsungData)[1:20]
+
+table(samsungData$activity)
+
+#Look at average accelerations only for subject #1 (use subset)
+
+par(mfrow=c(1,2), mar=c(5,4,1,1))
+# Transform = ????
+samsungData= transform(samsungData, activity = factor(activity))
+
+#only looking at subject 1, and plot
+sub1= subset(samsungData, subject==1)
+plot(sub1[ , 1] , col= sub1$activity , ylab= names(sub1)[1])
+plot(sub1[ , 2] , col= sub1$activity , ylab= names(sub1)[2])
+legend("bottomright" , legend= unique(sub1$activity), 
+       col=unique(sub1$activity, pch=1))
+
+# Looking at variablity.  More in walking and not so much standing or sitting
+install.packages("myplclust.R")
+source("myplclust.R")
+distanceMatrix=dist(sub1[ , 1:3])
+hclustering = hclust(distanceMatrix)
+plot(hclustering)
+#Messy/ shitty
+
+# Look at MAX acceleration, change to columns 10 and 11
+
+par(mfrow= c(1,2))
+
+plot(sub1[ , 10] , col= sub1$activity , ylab= names(sub1)[10] , pch=19)
+plot(sub1[ , 11] , col= sub1$activity , ylab= names(sub1)[11], pch=19)
+
+# More variability in acceleration
+
+#Cluster the data.
+
+distanceMatrix= dist(sub1[ , 10:12])
+hclustering=hclust(distanceMatrix)
+plot(hclustering)
+
+# Can see two activities are clustered
+#This seperates moving from non moving.  But within each cluster is
+# Still not obvious within each cluster what the breakdown is
+
+#Use SVD
+# The last two columns aren't useful, remove them
+svd1=svd(scale(sub1[ , -c(562, 563)]))
+par(mfrow=c(1,2))
+# Color code using activity.
+plot(svd1$u[ ,1], col=sub1$activity, pch=19)
+plot(svd1$u[ ,2], col=sub1$activity, pch=19)
+
+#activities color coded by activity
+
+# Find maximum contributor
+
+plot(svd1$v[ ,2] , pch=19)
+
+# What contributes to most of the variation
+
+maxContrib= which.max(svd1$v[ ,2])
+distanceMatrix= dist(sub1[ , c(10:12, maxContrib)])
+hclustering=hclust(distanceMatrix)
+plot(hclustering)
+
+# Various activities seem to be segregating out.  
+# Various non moving activities seem to still be mixed together
+
+names(samsungData)[maxContrib]
+
+# Use K means clustering
+# Must specify a starting point where the centers are located
+
+kClust= kmeans(sub1[ , -c(562, 563)] , centers= 6)
+table(kClust$cluster , sub1$activity)
+
+# Seeing that cluster 4 had laying, sitting and standing
+# Attempt to separate each of the variables out
+
+kClust= kmeans(sub1[ , -c(562, 563)] , centers= 6 , nstart =100)
+table(kClust$cluster , sub1$activity)
+
+plot(kClust$center [ 1 , 1:5] , pch=19 , ylab= "Cluster Center"
+     , xlab= "Yupp")
+
+# Cluster centers look at intersting values which drive the Variabtion within the data
+
+# Gives rough idea of where to look in big data sets. 
+
+```
+
+Air pollution case study
+
+Question #1:  Are air pollution levels lower in 2012 than they 
+were in 1999
+```{r}
+# Read in the data from 1999
+
+# When reading in, check the separator, and what the NA values are
+# In this case, seperator is | and NA are just blanks , or ""
+
+# STEP 1:  Read in the 1999 Data
+pm0=read.table("RD_501_88101_1999-0.txt" , comment.char="#",
+               header=FALSE,
+               sep = "|",
+               na.strings= "")
+
+# basic checks
+dim(pm0)
+head(pm0)
+
+# STEP 2: Need the column names
+
+cnames= readLines("RD_501_88101_1999-0.txt" , 1)
+cnames
+#STEP 3: Need to split out the names, since the above format is a string
+# Names are separated by |
+# Returns a list
+
+cnames= strsplit(cnames , "|", fixed= TRUE)
+cnames
+
+#STEP 4: Assign the names to the pm0 data set
+
+names(pm0) = cnames[[1]]
+head(pm0)
+
+# Takes string and turns it into a column name
+names(pm0) = make.names(cnames[[1]])
+head(pm0)
+# All the spaces are gone and replaced with . so that
+# The variable names are valid.
+
+# STEP 5: Sample value variable is the one of concern. 
+x0 = pm0$Sample.Value
+class(x0)
+summary(x0)
+
+# How many are missing values?  
+
+mean(is.na(x0))
+# Roughly 11 Percent
+# How significant is this?  
+
+# For the 2013 Data Set
+
+# STEP 6:  Read in the data
+
+pm1=read.table("RD_501_88101_2013-0.txt" , comment.char="#",
+               header=FALSE,
+               sep = "|",
+               na.strings= "")
+
+dim(pm1)
+
+# Same names as last data frame
+
+names(pm1)= make.names(cnames[[1]])
+
+head(pm1)
+
+x1= pm1$Sample.Value
+summary(x1)
+mean(is.na(x1))
+# 6% are missing
+
+summary(x0)
+summary(x1)
+
+# Appears as if median values decreased in the 2013
+# STEP 7:  Visual representations
+
+boxplot(x0, x1)
+boxplot(log10(x0) , log10(x1))
+
+# here , ask questions of what the data shows
+# Why is there negative data in 2013?
+
+#STEP 8:  Explore the negative values further
+negative = x1 <0
+str(negative)
+sum(negative , na.rm=TRUE)
+mean( negative, na.rm=TRUE)
+
+# Small proportion
+
+dates = pm1$Date
+str(dates)
+# Integers aren't useful, convert to year
+
+dates=  as.Date(as.character(dates), "%Y%m%d")
+str(dates)
+hist(dates , "month")
+
+# Where were the negative values?
+hist(dates[negative] , "month")
+# more spikes in certain months
+
+
+# STEP 4: Explore one monitor at a time.  Find one that exists in 
+# 1999 and 2013.  
+
+# subset the data and remove unqiue values
+# Add the county code and site ID to the new subset data
+# do this for both years
+
+site0= unique(subset(pm0, State.Code==36, c(County.Code, Site.ID)))
+site1= unique(subset(pm1, State.Code==36, c(County.Code, Site.ID)))
+
+#Create a variable with county variable and site ID separated by a 
+# " . "
+# use the paste command
+
+site0= paste(site0[ , 1] , site0 [ , 2] , sep=".")
+site1= paste(site1[ , 1] , site1 [ , 2] , sep=".")
+
+str(site0)
+
+#Only 33 site ID and county combinations
+#What is the intersections exist?  What existed in 1999 that exists in 2013
+
+both= intersect(site0, site1)
+both
+
+#There are 11 which gives a few options of sites that were around in 1999 and 2013
+
+#Create a new Variable.  Put in origional data frames
+
+pm0$county.site = with( pm0, 
+        paste(County.Code , Site.ID , sep= ".") )
+
+pm1$county.site = with( pm1, 
+        paste(County.Code , Site.ID , sep= ".") )
+
+# subset this data frame just to be ONLY NY
+
+cnt0 = subset( pm0, State.Code == 36 & county.site %in% both)
+cnt1 = subset( pm1, State.Code == 36 & county.site %in% both)
+
+head(cnt0)
+
+#split the new data frame buy the county site
+
+sapply(split(cnt0, cnt0$county.site) , nrow)
+sapply(split(cnt1, cnt1$county.site) , nrow)
+
+# in 1999 - county 1 site 12 had 61 Observations
+# in 2013 - county 1 site 12 had 122 observations
+
+pm1sub = subset( pm1, State.Code== 36 & County.Code == 63 & Site.ID == 2008)
+pm0sub = subset( pm0, State.Code== 36 & County.Code == 63 & Site.ID == 2008)
+
+dim(pm1sub)
+dim(pm0sub)
+
+# use a time series to see if PM 2.5 data in the same sites is going down
+
+dates1= pm1sub$Date
+x1sub=pm1sub$Sample.Value
+plot(dates1, x1sub)
+
+# Dates need to be converted
+
+dates1= as.Date(as.character(dates1) , "%Y%m%d")
+plot(dates1, x1sub)
+
+
+dates0=pm0sub$Date
+dates0= as.Date(as.character(dates0) , "%Y%m%d")
+x0sub=pm0sub$Sample.Value
+plot(dates0, x0sub)
+
+# Overlap the plots
+
+par(mfrow= c( 1, 2))
+plot(dates0, x0sub, pch=20)
+abline( h = median(x0sub, na.rm=TRUE))
+plot(dates1, x1sub, pch =20)
+abline( h = median(x1sub, na.rm=TRUE))
+
+# Change the axis to compare apples to apples
+#Can look at both data sets, remove the NA values
+
+rng=range(x0sub, x1sub, na.rm=TRUE)
+
+# use this range to change the y axis
+
+plot(dates0, x0sub, pch=20 , ylim=rng)
+abline( h = median(x0sub, na.rm=TRUE))
+plot(dates1, x1sub, pch =20 , ylim=rng)
+abline( h = median(x1sub, na.rm=TRUE))
+
+# Larger spread in 1999 than there is in 2013
+# Median is also lower
+# average levels are going down, as are the extreme values
+# Good.
+
+# STEP 9: Look at the individual states and how they change over the years.  Each state must come into compliance, so the state level is important to analyze
+
+
+head(pm0)
+# State.Code, and Sample.Value 
+# Want an average Sample.Value over each State.Code
+
+mn0= with(pm0, tapply(Sample.Value, State.Code, mean, na.rm=TRUE))
+str(mn0)
+summary(mn0)
+
+mn1= with(pm1, tapply(Sample.Value, State.Code, mean, na.rm=TRUE))
+summary(mn1)
+
+# STEP 10: Create a data frame
+
+d0= data.frame(state= names(mn0) , mean= mn0)
+d1= data.frame(state= names(mn1) , mean= mn1)
+head(d0)
+# Each state has a mean
+mrg=merge(d0, d1, by = "state")
+
+dim(mrg)
+
+# x is 1999  y is 2013 and has each state as a row
+
+par(mfrow = c (1, 1))
+
+
+
+with( mrg, plot(rep(1999, 52) , mrg[ ,2],xlim=c(1998 , 2015)))
+with(mrg, points(rep(2013, 52), mrg[ ,3]))
+
+# join segments
+
+segments(rep(1999, 52) , mrg[ , 2] , rep( 2013 , 52) , mrg [ , 3])
+
+# Conclusion: Majority of states are decreasing since 1999 to 2013
+```
